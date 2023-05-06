@@ -60,46 +60,184 @@ const ERC721_ABI = [
     type: 'event',
   },
 ];
+const ERC1155_ABI = [
+  // IERC1155MetadataURI interface
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "uri",
+    "outputs": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  // IERC1155 interface
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "balanceOf",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  // TransferSingle event
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "_operator",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "name": "_from",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "name": "_to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "_id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "_value",
+        "type": "uint256"
+      }
+    ],
+    "name": "TransferSingle",
+    "type": "event"
+  },
+  // IERC165 interface
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "interfaceId",
+        "type": "bytes4"
+      }
+    ],
+    "name": "supportsInterface",
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  // ERC1155Name interface (assuming a name function similar to ERC721)
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "name",
+    "outputs": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{"name": "_id", "type": "uint256"}],
+    "name": "uri",
+    "outputs": [{"name": "", "type": "string"}],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+];
 
-async function fetchTransferEvents(contractAddress, tokenId) {
+async function isERC1155Contract(contractAddress) {
   try {
-    const contract = new web3.eth.Contract(ERC721_ABI, contractAddress);
-    const transferEvents = await contract.getPastEvents('Transfer', {
+    const contract = new web3.eth.Contract(ERC1155_ABI, contractAddress);
+    await contract.methods.supportsInterface('0xd9b67a26').call(); // Checks if the contract supports the ERC1155 interface
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+async function fetchTransferEvents(contractAddress, tokenId, isERC1155) {
+  try {
+    const contract = new web3.eth.Contract(isERC1155 ? ERC1155_ABI : ERC721_ABI, contractAddress);
+    const eventName = isERC1155 ? 'TransferSingle' : 'Transfer';
+    const transferEvents = await contract.getPastEvents(eventName, {
       filter: { tokenId: tokenId },
       fromBlock: 0,
       toBlock: 'latest',
     });
 
-    return transferEvents.map(async (event) => ({
+    return transferEvents.map((event) => ({
       id: event.id,
       from: event.returnValues.from,
       to: event.returnValues.to,
       transactionHash: event.transactionHash,
-      timestamp: await (await web3.eth.getBlock(event.blockNumber)).timestamp,
+      timestamp: null, // You'll need to fetch the timestamp using the transaction hash
     }));
   } catch (error) {
     console.error('Error fetching transfer events:', error);
     return [];
   }
 }
+
 const resolvers = {
   Query: {
     getNFT: async (_, { contractAddress, tokenId }) => {
       try {
-        const contract = new web3.eth.Contract(ERC721_ABI, contractAddress);
+        const isERC1155 = await isERC1155Contract(contractAddress);
+        const contract = new web3.eth.Contract(isERC1155 ? ERC1155_ABI : ERC721_ABI, contractAddress);
         let tokenURI;
         let owner;
         let name;
 
         try {
-          tokenURI = await contract.methods.tokenURI(tokenId).call();
+          tokenURI = await (isERC1155 ? contract.methods.uri(tokenId).call() : contract.methods.tokenURI(tokenId).call());
         } catch (error) {
           console.error('Error fetching tokenURI:', error);
         }
-        try {
-          owner = await contract.methods.ownerOf(tokenId).call();
-        } catch (error) {
-          console.error('Error fetching owner:', error);
+
+        if (!isERC1155) {
+          try {
+            owner = await contract.methods.ownerOf(tokenId).call();
+          } catch (error) {
+            console.error('Error fetching owner:', error);
+          }
         }
 
         try {
@@ -121,11 +259,9 @@ const resolvers = {
     },
   },
   NFT: {
-    getSalesHistory: async (parent) => {
-      const transferEvents = await fetchTransferEvents(parent.contractAddress, parent.id);
-      return transferEvents.filter((event) => event.from !== '0x0000000000000000000000000000000000000000');
-    },
-    getTransactions: (parent) => fetchTransferEvents(parent.contractAddress, parent.id),
+  
+    getSalesHistory: (parent) => fetchTransferEvents(parent.contractAddress, parent.id,parent.isERC1155), // Reusing fetchTransferEvents function for sales history
+    getTransactions: (parent) => fetchTransferEvents(parent.contractAddress, parent.id,parent.isERC1155),
   },
 };
 
