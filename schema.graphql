@@ -1,0 +1,101 @@
+# type Query {
+#   getNFT(id: ID!): NFT
+#   getAllNFTs: [NFT]
+#   getSalesHistory(nftId: ID!): [Sale]
+#   getTransactions(nftId: ID!): [Transaction]
+# }
+
+# type NFT {
+#   id: ID!
+#   name: String!
+#   description: String!
+#   imageUrl: String
+#   metadataUrl: String
+#   owner: String!
+#   creator: String!
+#   mintedAt: String!
+# }
+
+# type Sale {
+#   id: ID!
+#   nftId: ID!
+#   seller: String!
+#   buyer: String!
+#   price: Float!
+#   timestamp: String!
+# }
+
+# type Transaction {
+#   id: ID!
+#   nftId: ID!
+#   from: String!
+#   to: String!
+#   timestamp: String!
+# }
+
+# type NFT {
+#   id: ID!
+#   name: String
+#   description: String
+#   image: String
+#   owner: String
+#   contractAddress: String
+#   metadata: String
+# }
+
+# type Query {
+#   getNFT(contractAddress: String!, tokenId: ID!): NFT
+# }
+
+
+
+# type NFT {
+#   id: ID!
+#   name: String
+#   description: String
+#   image: String
+#   owner: String
+#   contractAddress: String
+#   metadata: String
+# }
+
+# type Query {
+#   getNFT(contractAddress: String!, tokenId: ID!): NFT
+# }
+
+
+
+type NFT {
+  id: ID!
+  name: String
+  description: String
+  image: String
+  owner: String
+  contractAddress: String
+  metadata: String
+}
+
+type SalesHistory {
+  nft: NFT
+  date: String
+  price: String
+  buyer: String
+  seller: String
+}
+
+type Transaction {
+  nft: NFT
+  from: String
+  to: String
+  date: String
+  value: String
+}
+
+type Query {
+  getNFT(contractAddress: String!, tokenId: ID!): NFT
+  getSalesHistory(contractAddress: String!, tokenId: ID!): [SalesHistory]
+  getTransactions(contractAddress: String!, tokenId: ID!): [Transaction]
+}
+
+
+
