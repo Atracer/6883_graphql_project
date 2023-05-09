@@ -59,6 +59,32 @@ const ERC721_ABI = [
     name: 'Transfer',
     type: 'event',
   },
+  //NFTSold interface
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: 'uint256',
+        name: 'tokenId',
+        type: 'uint256',
+      },
+      {
+        indexed: true,
+        internalType: 'address',
+        name: 'buyer',
+        type: 'address',
+      },
+      {
+        indexed: false,
+        internalType: 'uint256',
+        name: 'price',
+        type: 'uint256',
+      },
+    ],
+    name: 'NFTSold',
+    type: 'event',
+  }
 ];
 const ERC1155_ABI = [
   // IERC1155MetadataURI interface
@@ -216,6 +242,47 @@ async function fetchTransferEvents(contractAddress, tokenId, isERC1155) {
   }
 }
 
+async function getNFTSoldEvents(contractAddress) {
+  const contractInstance = new web3.eth.Contract(ERC721_ABI, contractAddress);
+  const events = await contractInstance.getPastEvents('NFTSold', {
+    fromBlock: 0,
+    toBlock: 'latest',
+  });
+  return events;
+}
+
+async function getNFTsWithLatestSalePrice(contractAddress, limit) {
+  const soldEvents = await getNFTSoldEvents(contractAddress);
+  
+  // Create an object to store the latest sale price for each NFT
+  const nftSalePrices = {};
+
+  soldEvents.forEach((event) => {
+    const tokenId = event.returnValues.tokenId.toString();
+    const price = parseFloat(web3.utils.fromWei(event.returnValues.price, 'ether'));
+
+    if (!nftSalePrices[tokenId] || nftSalePrices[tokenId] < price) {
+      nftSalePrices[tokenId] = price;
+    }
+  });
+
+  // Sort the NFTs by their latest sale price
+  const sortedTokenIds = Object.keys(nftSalePrices).sort((a, b) => nftSalePrices[b] - nftSalePrices[a]);
+
+  // Fetch NFT details for the top NFTs
+  const topNFTs = [];
+  for (let i = 0; i < limit && i < sortedTokenIds.length; i++) {
+    const tokenId = sortedTokenIds[i];
+    const nft = await getNFT(contractAddress, tokenId);
+    nft.latestSalePrice = nftSalePrices[tokenId];
+    topNFTs.push(nft);
+  }
+
+  return topNFTs;
+}
+
+
+
 const resolvers = {
   Query: {
     getNFT: async (_, { contractAddress, tokenId }) => {
@@ -232,14 +299,14 @@ const resolvers = {
           console.error('Error fetching tokenURI:', error);
         }
 
-        if (!isERC1155) {
-          try {
-            owner = await contract.methods.ownerOf(tokenId).call();
-          } catch (error) {
-            console.error('Error fetching owner:', error);
-          }
+        
+        try {
+          owner = await contract.methods.ownerOf(tokenId).call();
+        } catch (error) {
+          console.error('Error fetching owner:', error);
         }
-
+        
+ 
         try {
           name = await contract.methods.name().call();
         } catch (error) {
@@ -257,9 +324,13 @@ const resolvers = {
         throw new Error(`Error fetching NFT data from the smart contract: ${error.message}`);
       }
     },
+    topNFTsByLatestSalePrice: async (_, { contractAddress, limit }) => {
+      const topNFTs = await getNFTsWithLatestSalePrice(contractAddress, limit);
+      return topNFTs;
+    },
   },
   NFT: {
-  
+
     getSalesHistory: (parent) => fetchTransferEvents(parent.contractAddress, parent.id,parent.isERC1155), // Reusing fetchTransferEvents function for sales history
     getTransactions: (parent) => fetchTransferEvents(parent.contractAddress, parent.id,parent.isERC1155),
   },

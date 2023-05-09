@@ -6,7 +6,9 @@ type NFT {
   metadata: String
   getSalesHistory: [TransferEvent]
   getTransactions: [TransferEvent]
+  latestSalePrice: Float 
 }
+
 
 type TransferEvent {
   id: ID!
@@ -18,5 +20,7 @@ type TransferEvent {
 
 type Query {
   getNFT(contractAddress: String!, tokenId: ID!): NFT
+  topNFTsByLatestSalePrice(contractAddress: String!, limit: Int!): [NFT]
 }
+
 
